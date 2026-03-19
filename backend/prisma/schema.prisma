@@ -1,0 +1,209 @@
+// Kinsaep POS - Multi-Tenant SaaS Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users (Store Owners & Super Admin) ───
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password      String
+  name          String
+  phone         String?
+  role          UserRole @default(OWNER)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  stores        Store[]
+  activityLogs  ActivityLog[]
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  OWNER
+}
+
+// ─── Stores (Tenants) ───
+model Store {
+  id            String   @id @default(uuid())
+  name          String
+  address       String?
+  phone         String?
+  businessType  String   @default("retail")
+  currency      String   @default("LAK")
+  locale        String   @default("lo")
+  taxEnabled    Boolean  @default(false)
+  taxRate       Float    @default(0)
+  receiptHeader String?
+  receiptFooter String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ownerId       String
+  owner         User     @relation(fields: [ownerId], references: [id])
+
+  subscription  Subscription?
+  staff         Staff[]
+  categories    Category[]
+  items         Item[]
+  sales         Sale[]
+  shifts        Shift[]
+  activityLogs  ActivityLog[]
+}
+
+// ─── Subscription (Billing & Access Control) ───
+model Subscription {
+  id          String             @id @default(uuid())
+  storeId     String             @unique
+  store       Store              @relation(fields: [storeId], references: [id])
+  plan        SubscriptionPlan   @default(FREE)
+  status      SubscriptionStatus @default(BLOCKED)
+  validUntil  DateTime
+  trialEndsAt DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+enum SubscriptionPlan {
+  FREE_TRIAL
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  BLOCKED
+  CANCELLED
+}
+
+// ─── Staff (RBAC within a Store) ───
+model Staff {
+  id        String    @id @default(uuid())
+  storeId   String
+  store     Store     @relation(fields: [storeId], references: [id])
+  name      String
+  pin       String    // bcrypt hash for server-side verification
+  pinLocalHash String // hash synced to device for local unlocks
+  role      StaffRole @default(CASHIER)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  activityLogs ActivityLog[]
+}
+
+enum StaffRole {
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+// ─── Categories ───
+model Category {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  name      String
+  color     Int      @default(4282155766)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items     Item[]
+}
+
+// ─── Items ───
+model Item {
+  id          String   @id @default(uuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  name        String
+  price       Float    @default(0)
+  cost        Float    @default(0)
+  barcode     String?
+  trackStock  Boolean  @default(false)
+  stockQty    Float    @default(0)
+  lowStockAt  Float    @default(5)
+  modifiers   Json     @default("[]")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  saleItems   SaleItem[]
+}
+
+// ─── Sales ───
+model Sale {
+  id              String   @id @default(uuid())
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id])
+  receiptNumber   String
+  subtotal        Float    @default(0)
+  discountAmount  Float    @default(0)
+  discountPercent Float    @default(0)
+  taxAmount       Float    @default(0)
+  totalAmount     Float    @default(0)
+  amountPaid      Float    @default(0)
+  changeAmount    Float    @default(0)
+  paymentMethod   String   @default("cash")
+  status          String   @default("completed")
+  ticketName      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items           SaleItem[]
+}
+
+// ─── Sale Items ───
+model SaleItem {
+  id         String @id @default(uuid())
+  saleId     String
+  sale       Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       Item   @relation(fields: [itemId], references: [id])
+  itemName   String
+  quantity   Float  @default(1)
+  unitPrice  Float  @default(0)
+  totalPrice Float  @default(0)
+}
+
+// ─── Shifts ───
+model Shift {
+  id           String   @id @default(uuid())
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id])
+  openedAt     DateTime @default(now())
+  closedAt     DateTime?
+  startingCash Float    @default(0)
+  cashAdded    Float    @default(0)
+  cashRemoved  Float    @default(0)
+  expectedCash Float?
+  actualCash   Float?
+  difference   Float?
+  status       String   @default("open")
+}
+
+// ─── Activity Log (Audit Trail) ───
+model ActivityLog {
+  id        String   @id @default(uuid())
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id])
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  staffId   String?
+  staff     Staff?   @relation(fields: [staffId], references: [id])
+  action    String   // e.g. "REFUND_SALE", "UPDATE_ITEM", "LOGIN", "CLOSE_SHIFT"
+  details   Json?    // Additional context
+  ipAddress String?
+  createdAt DateTime @default(now())
+}

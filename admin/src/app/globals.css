@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #FF7B54;
+  --color-primary-dark: #FF6231;
+  --color-surface: #F8F9FE;
+  --color-text-dark: #1E1E2C;
+}
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-text-dark);
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-sm;
+  }
+}
