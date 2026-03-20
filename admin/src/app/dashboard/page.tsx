@@ -9,7 +9,14 @@ type DashboardStats = {
   totalStores: number;
   activeStores: number;
   totalUsers: number;
+  activeSyncJobs: number;
   statusBreakdown: Record<string, number>;
+  packages: Array<{
+    id: string;
+    code: string;
+    name: string;
+    isActive: boolean;
+  }>;
 };
 
 export default function DashboardOverview() {
@@ -79,6 +86,12 @@ export default function DashboardOverview() {
           icon={<ShieldAlert className="w-5 h-5 text-red-500" />}
           iconBg="bg-red-50"
         />
+        <StatCard
+          title="Running Sync Jobs"
+          value={stats?.activeSyncJobs || 0}
+          icon={<Activity className="w-5 h-5 text-indigo-500" />}
+          iconBg="bg-indigo-50"
+        />
       </div>
 
       <div className="glass-panel p-8 rounded-2xl">
@@ -88,6 +101,30 @@ export default function DashboardOverview() {
           <ModeCard label="OFFLINE_ONLY" value={breakdown.OFFLINE_ONLY || 0} tone="orange" />
           <ModeCard label="BLOCKED" value={breakdown.BLOCKED || 0} tone="red" />
           <ModeCard label="EXPIRED" value={breakdown.EXPIRED || 0} tone="slate" />
+        </div>
+      </div>
+
+      <div className="glass-panel p-8 rounded-2xl">
+        <h2 className="text-xl font-bold text-[#1E1E2C] mb-6">Package Templates</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {(stats?.packages || []).map((pkg) => (
+            <div
+              key={pkg.id}
+              className="rounded-2xl border border-gray-100 bg-white p-4"
+            >
+              <p className="text-xs font-semibold tracking-[0.16em] text-gray-400">
+                {pkg.code}
+              </p>
+              <p className="mt-2 text-lg font-bold text-[#1E1E2C]">{pkg.name}</p>
+              <p
+                className={`mt-4 text-xs font-semibold ${
+                  pkg.isActive ? 'text-green-600' : 'text-gray-400'
+                }`}
+              >
+                {pkg.isActive ? 'ACTIVE TEMPLATE' : 'INACTIVE TEMPLATE'}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
     </div>

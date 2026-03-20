@@ -16,12 +16,13 @@ class ModifierSelectorSheet extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<ModifierSelectorSheet> createState() => _ModifierSelectorSheetState();
+  ConsumerState<ModifierSelectorSheet> createState() =>
+      _ModifierSelectorSheetState();
 }
 
 class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
   List<Map<String, dynamic>> _groups = [];
-  
+
   // Tracks the index of the selected option for each group.
   final Map<int, int> _selections = {};
   int _quantity = 1;
@@ -32,7 +33,9 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
     try {
       final parsed = jsonDecode(widget.modifiersJson);
       if (parsed is List) {
-        _groups = List<Map<String, dynamic>>.from(parsed.map((x) => Map<String, dynamic>.from(x)));
+        _groups = List<Map<String, dynamic>>.from(
+          parsed.map((x) => Map<String, dynamic>.from(x)),
+        );
         // Default to first option for each group
         for (int i = 0; i < _groups.length; i++) {
           if ((_groups[i]['options'] as List).isNotEmpty) {
@@ -77,7 +80,9 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
     final total = _totalPrice;
 
     return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+      ),
       decoration: BoxDecoration(
         color: KinsaepTheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -103,7 +108,10 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
                 Expanded(
                   child: Text(
                     widget.item['name'] as String,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -114,7 +122,7 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
             ),
           ),
           const Divider(height: 1),
-          
+
           Flexible(
             child: ListView.builder(
               padding: const EdgeInsets.all(20),
@@ -123,7 +131,7 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
                 final group = _groups[groupIndex];
                 final options = group['options'] as List;
                 if (options.isEmpty) return const SizedBox();
-                
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -132,16 +140,19 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
                       child: Text(
                         group['name'],
                         style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700, color: KinsaepTheme.textSecondary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: KinsaepTheme.textSecondary,
                         ),
                       ),
                     ),
                     ...List.generate(options.length, (optIndex) {
                       final opt = options[optIndex];
-                      final priceStr = (opt['price'] ?? 0.0) > 0 
-                          ? '+${CurrencyUtil.format(opt['price'], currency)}'
-                          : '';
-                          
+                      final priceStr =
+                          (opt['price'] ?? 0.0) > 0
+                              ? '+${CurrencyUtil.format(opt['price'], currency)}'
+                              : '';
+
                       return RadioListTile<int>(
                         value: optIndex,
                         groupValue: _selections[groupIndex],
@@ -150,8 +161,19 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
                             setState(() => _selections[groupIndex] = val);
                           }
                         },
-                        title: Text(opt['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: priceStr.isNotEmpty ? Text(priceStr, style: const TextStyle(color: KinsaepTheme.primary)) : null,
+                        title: Text(
+                          opt['name'],
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle:
+                            priceStr.isNotEmpty
+                                ? Text(
+                                  priceStr,
+                                  style: const TextStyle(
+                                    color: KinsaepTheme.primary,
+                                  ),
+                                )
+                                : null,
                         activeColor: KinsaepTheme.primary,
                         contentPadding: EdgeInsets.zero,
                         controlAffinity: ListTileControlAffinity.trailing,
@@ -165,7 +187,7 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
               },
             ),
           ),
-          
+
           // Bottom Bar
           Container(
             padding: const EdgeInsets.all(20),
@@ -191,13 +213,31 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
                     child: Row(
                       children: [
                         IconButton(
-                          onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null,
-                          icon: Icon(Icons.remove_rounded, color: _quantity > 1 ? KinsaepTheme.textPrimary : KinsaepTheme.textSecondary),
+                          onPressed:
+                              _quantity > 1
+                                  ? () => setState(() => _quantity--)
+                                  : null,
+                          icon: Icon(
+                            Icons.remove_rounded,
+                            color:
+                                _quantity > 1
+                                    ? KinsaepTheme.textPrimary
+                                    : KinsaepTheme.textSecondary,
+                          ),
                         ),
-                        Text('$_quantity', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        Text(
+                          '$_quantity',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                         IconButton(
                           onPressed: () => setState(() => _quantity++),
-                          icon: const Icon(Icons.add_rounded, color: KinsaepTheme.textPrimary),
+                          icon: const Icon(
+                            Icons.add_rounded,
+                            color: KinsaepTheme.textPrimary,
+                          ),
                         ),
                       ],
                     ),
@@ -209,22 +249,29 @@ class _ModifierSelectorSheetState extends ConsumerState<ModifierSelectorSheet> {
                       onPressed: () {
                         // Calculate final unit price (totalPrice / quantity)
                         final unitPrice = total / _quantity;
-                        ref.read(cartProvider.notifier).addItemFromTicket(
-                          itemId: widget.item['id'] as String,
-                          name: _variantName,
-                          price: unitPrice,
-                          quantity: _quantity,
-                        );
+                        ref
+                            .read(cartProvider.notifier)
+                            .addItemFromTicket(
+                              itemId: widget.item['id'] as String,
+                              name: _variantName,
+                              price: unitPrice,
+                              quantity: _quantity,
+                            );
                         Navigator.pop(context);
                       },
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         backgroundColor: KinsaepTheme.primary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       child: Text(
                         'Add ${CurrencyUtil.format(total, currency)}',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),

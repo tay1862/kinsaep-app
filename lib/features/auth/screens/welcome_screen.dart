@@ -25,7 +25,11 @@ class WelcomeScreen extends StatelessWidget {
                     gradient: KinsaepTheme.primaryGradient,
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Icon(Icons.storefront_rounded, size: 50, color: Colors.white),
+                  child: const Icon(
+                    Icons.storefront_rounded,
+                    size: 50,
+                    color: Colors.white,
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
@@ -42,38 +46,50 @@ class WelcomeScreen extends StatelessWidget {
               const Text(
                 'Your professional all-in-one POS system. Cloud sync, multi-branch, and powerful tools to run your business.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                  height: 1.5,
-                ),
+                style: TextStyle(fontSize: 16, color: Colors.grey, height: 1.5),
               ),
               const Spacer(flex: 2),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: KinsaepTheme.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   elevation: 0,
                 ),
-                child: const Text('Create New Store', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Create New Store',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
               const SizedBox(height: 16),
               OutlinedButton(
                 onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: KinsaepTheme.primary,
                   side: const BorderSide(color: KinsaepTheme.primary, width: 2),
                   padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
-                child: const Text('Log In to Existing Store', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Log In to Existing Store',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),

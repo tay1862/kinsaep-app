@@ -3,20 +3,20 @@ import 'package:google_fonts/google_fonts.dart';
 
 class KinsaepTheme {
   // ─── Brand Colors ───
-  static const Color primary = Color(0xFF4F46E5);       // Indigo
-  static const Color primaryLight = Color(0xFF818CF8);   // Indigo 400
-  static const Color primaryDark = Color(0xFF3730A3);    // Indigo 800
-  static const Color secondary = Color(0xFF06B6D4);      // Cyan
+  static const Color primary = Color(0xFF4F46E5); // Indigo
+  static const Color primaryLight = Color(0xFF818CF8); // Indigo 400
+  static const Color primaryDark = Color(0xFF3730A3); // Indigo 800
+  static const Color secondary = Color(0xFF06B6D4); // Cyan
   static const Color secondaryLight = Color(0xFF22D3EE); // Cyan 400
-  static const Color accent = Color(0xFF10B981);         // Emerald (success)
-  static const Color warning = Color(0xFFF59E0B);        // Amber
-  static const Color error = Color(0xFFEF4444);          // Red
-  static const Color surface = Color(0xFFF8FAFC);        // Slate 50
+  static const Color accent = Color(0xFF10B981); // Emerald (success)
+  static const Color warning = Color(0xFFF59E0B); // Amber
+  static const Color error = Color(0xFFEF4444); // Red
+  static const Color surface = Color(0xFFF8FAFC); // Slate 50
   static const Color surfaceCard = Colors.white;
-  static const Color textPrimary = Color(0xFF0F172A);    // Slate 900
-  static const Color textSecondary = Color(0xFF64748B);  // Slate 500
-  static const Color border = Color(0xFFE2E8F0);         // Slate 200
-  static const Color divider = Color(0xFFF1F5F9);        // Slate 100
+  static const Color textPrimary = Color(0xFF0F172A); // Slate 900
+  static const Color textSecondary = Color(0xFF64748B); // Slate 500
+  static const Color border = Color(0xFFE2E8F0); // Slate 200
+  static const Color divider = Color(0xFFF1F5F9); // Slate 100
 
   // ─── Category Colors ───
   static const List<Color> categoryColors = [
@@ -96,12 +96,8 @@ class KinsaepTheme {
           fontWeight: FontWeight.w600,
           color: textPrimary,
         ),
-        bodyLarge: baseTextTheme.bodyLarge?.copyWith(
-          color: textPrimary,
-        ),
-        bodyMedium: baseTextTheme.bodyMedium?.copyWith(
-          color: textSecondary,
-        ),
+        bodyLarge: baseTextTheme.bodyLarge?.copyWith(color: textPrimary),
+        bodyMedium: baseTextTheme.bodyMedium?.copyWith(color: textSecondary),
         labelLarge: baseTextTheme.labelLarge?.copyWith(
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
@@ -198,7 +194,10 @@ class KinsaepTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: error),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         hintStyle: GoogleFonts.inter(color: textSecondary, fontSize: 14),
       ),
 
@@ -224,28 +223,25 @@ class KinsaepTheme {
         backgroundColor: primary,
         foregroundColor: Colors.white,
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
 
       // ─── Chips ───
       chipTheme: ChipThemeData(
         backgroundColor: surface,
         selectedColor: primary.withValues(alpha: 0.12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         side: BorderSide(color: border),
-        labelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
+        labelStyle: GoogleFonts.inter(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       ),
 
       // ─── Dialog ───
       dialogTheme: DialogThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         elevation: 8,
       ),
 
@@ -260,18 +256,12 @@ class KinsaepTheme {
       // ─── SnackBar ───
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 4,
       ),
 
       // ─── Divider ───
-      dividerTheme: DividerThemeData(
-        color: divider,
-        space: 1,
-        thickness: 1,
-      ),
+      dividerTheme: DividerThemeData(color: divider, space: 1, thickness: 1),
 
       // ─── Page Transitions ───
       pageTransitionsTheme: const PageTransitionsTheme(
@@ -285,7 +275,9 @@ class KinsaepTheme {
 
   // ─── Dark Theme ───
   static ThemeData get darkTheme {
-    final baseTextTheme = GoogleFonts.interTextTheme(ThemeData.dark().textTheme);
+    final baseTextTheme = GoogleFonts.interTextTheme(
+      ThemeData.dark().textTheme,
+    );
 
     return ThemeData(
       useMaterial3: true,
@@ -329,7 +321,9 @@ class KinsaepTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
 
@@ -348,7 +342,10 @@ class KinsaepTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: primaryLight, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
 
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(

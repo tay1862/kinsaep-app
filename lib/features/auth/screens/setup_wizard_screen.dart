@@ -61,6 +61,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         'createdAt': DateTime.now().toIso8601String(),
         'updatedAt': DateTime.now().toIso8601String(),
       });
+      await DatabaseHelper.instance.ensureDefaultKitchenStations();
 
       // 3. Refresh global providers
       ref.invalidate(storeSettingsProvider);

@@ -26,7 +26,7 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
 
   Future<void> _openShift() async {
     final startingCash = double.tryParse(_cashController.text) ?? 0.0;
-    
+
     final newShift = {
       'id': _uuid.v4(),
       'openedAt': DateTime.now().toIso8601String(),
@@ -36,7 +36,7 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
       'status': 'open',
       'syncStatus': 'PENDING',
     };
-    
+
     await DatabaseHelper.instance.insertShift(newShift);
     ref.invalidate(currentShiftProvider);
     if (mounted) {
@@ -47,10 +47,13 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
     }
   }
 
-  Future<void> _closeShift(Map<String, dynamic> shift, double expectedCash) async {
+  Future<void> _closeShift(
+    Map<String, dynamic> shift,
+    double expectedCash,
+  ) async {
     final actualCash = double.tryParse(_cashController.text) ?? 0.0;
     final difference = actualCash - expectedCash;
-    
+
     final updates = {
       'closedAt': DateTime.now().toIso8601String(),
       'expectedCash': expectedCash,
@@ -59,7 +62,7 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
       'status': 'closed',
       'syncStatus': 'PENDING',
     };
-    
+
     await DatabaseHelper.instance.updateShift(shift['id'] as String, updates);
     ref.invalidate(currentShiftProvider);
     if (mounted) {
@@ -71,46 +74,66 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
     }
   }
 
-  void _showCloseShiftDialog(Map<String, dynamic> shift, double expectedCash, String currency) {
+  void _showCloseShiftDialog(
+    Map<String, dynamic> shift,
+    double expectedCash,
+    String currency,
+  ) {
     _cashController.text = '';
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Close Shift', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Expected Cash in Drawer: ${CurrencyUtil.format(expectedCash, currency)}'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _cashController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Actual Cash Counted',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.attach_money_rounded),
-              ),
-              autofocus: true,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text(
+              'Close Shift',
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => _closeShift(shift, expectedCash),
-            style: ElevatedButton.styleFrom(backgroundColor: KinsaepTheme.error),
-            child: const Text('Close Shift', style: TextStyle(color: Colors.white)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Expected Cash in Drawer: ${CurrencyUtil.format(expectedCash, currency)}',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _cashController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Actual Cash Counted',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.attach_money_rounded),
+                  ),
+                  autofocus: true,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => _closeShift(shift, expectedCash),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: KinsaepTheme.error,
+                ),
+                child: const Text(
+                  'Close Shift',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final shiftAsync = ref.watch(currentShiftProvider);
-    
+
     return Scaffold(
       backgroundColor: KinsaepTheme.surface,
       appBar: AppBar(
@@ -138,7 +161,11 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.lock_clock_rounded, size: 80, color: KinsaepTheme.textSecondary),
+            const Icon(
+              Icons.lock_clock_rounded,
+              size: 80,
+              color: KinsaepTheme.textSecondary,
+            ),
             const SizedBox(height: 16),
             const Text(
               'No active shift currently open',
@@ -147,7 +174,9 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
             const SizedBox(height: 32),
             TextField(
               controller: _cashController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Starting Cash Amount',
                 border: OutlineInputBorder(),
@@ -162,9 +191,18 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
                 onPressed: _openShift,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: KinsaepTheme.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                child: const Text('Open Shift', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                child: const Text(
+                  'Open Shift',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ),
           ],
@@ -174,10 +212,13 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
   }
 
   Widget _buildActiveShiftView(Map<String, dynamic> shift) {
-    final currency = 'LAK'; // Should be read from settings ideally, hardcoded or use currencyUtil normally
+    final currency =
+        'LAK'; // Should be read from settings ideally, hardcoded or use currencyUtil normally
     final openedAt = DateTime.parse(shift['openedAt'] as String);
-    final salesAsync = ref.watch(shiftSalesProvider(shift['openedAt'] as String));
-    
+    final salesAsync = ref.watch(
+      shiftSalesProvider(shift['openedAt'] as String),
+    );
+
     return salesAsync.when(
       data: (sales) {
         final startingCash = (shift['startingCash'] as num).toDouble();
@@ -185,9 +226,9 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
         final otherSales = (sales['otherSales'] as num).toDouble();
         final cashAdded = (shift['cashAdded'] as num).toDouble();
         final cashRemoved = (shift['cashRemoved'] as num).toDouble();
-        
+
         final expectedCash = startingCash + cashSales + cashAdded - cashRemoved;
-        
+
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -209,15 +250,29 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
                           color: KinsaepTheme.accent.withAlpha(25),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(Icons.lock_open_rounded, color: KinsaepTheme.accent, size: 24),
+                        child: const Icon(
+                          Icons.lock_open_rounded,
+                          color: KinsaepTheme.accent,
+                          size: 24,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Shift is Open', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          Text('Opened at ${DateFormat('MM/dd/yyyy HH:mm').format(openedAt)}', 
-                               style: const TextStyle(color: KinsaepTheme.textSecondary)),
+                          const Text(
+                            'Shift is Open',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Opened at ${DateFormat('MM/dd/yyyy HH:mm').format(openedAt)}',
+                            style: const TextStyle(
+                              color: KinsaepTheme.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -225,8 +280,17 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
                   const SizedBox(height: 24),
                   _buildStatRow('Starting Cash Drawer', startingCash, currency),
                   const Divider(height: 24),
-                  _buildStatRow('Cash Sales', cashSales, currency, isPositive: true),
-                  _buildStatRow('Other Sales (Card, transfer)', otherSales, currency),
+                  _buildStatRow(
+                    'Cash Sales',
+                    cashSales,
+                    currency,
+                    isPositive: true,
+                  ),
+                  _buildStatRow(
+                    'Other Sales (Card, transfer)',
+                    otherSales,
+                    currency,
+                  ),
                   const Divider(height: 24),
                   _buildStatRow('Cash Paid In', cashAdded, currency),
                   _buildStatRow('Cash Paid Out', cashRemoved, currency),
@@ -234,9 +298,21 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Expected Cash in Drawer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text(CurrencyUtil.format(expectedCash, currency), 
-                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: KinsaepTheme.primary)),
+                      const Text(
+                        'Expected Cash in Drawer',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        CurrencyUtil.format(expectedCash, currency),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: KinsaepTheme.primary,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -252,7 +328,9 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
                     },
                     icon: const Icon(Icons.arrow_downward_rounded),
                     label: const Text('Pay In'),
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -263,20 +341,32 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
                     },
                     icon: const Icon(Icons.arrow_upward_rounded),
                     label: const Text('Pay Out'),
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: () => _showCloseShiftDialog(shift, expectedCash, currency),
+              onPressed:
+                  () => _showCloseShiftDialog(shift, expectedCash, currency),
               style: ElevatedButton.styleFrom(
                 backgroundColor: KinsaepTheme.error,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text('Close Shift', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+              child: const Text(
+                'Close Shift',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
             ),
           ],
         );
@@ -286,19 +376,31 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
     );
   }
 
-  Widget _buildStatRow(String label, double amount, String currency, {bool isPositive = false}) {
+  Widget _buildStatRow(
+    String label,
+    double amount,
+    String currency, {
+    bool isPositive = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 15, color: KinsaepTheme.textSecondary)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 15,
+              color: KinsaepTheme.textSecondary,
+            ),
+          ),
           Text(
             CurrencyUtil.format(amount, currency),
             style: TextStyle(
-              fontSize: 15, 
+              fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: isPositive ? KinsaepTheme.accent : KinsaepTheme.textPrimary,
+              color:
+                  isPositive ? KinsaepTheme.accent : KinsaepTheme.textPrimary,
             ),
           ),
         ],

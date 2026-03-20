@@ -3,13 +3,20 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Store } from 'lucide-react';
-import { fetchApi } from '@/lib/api';
+import { fetchApi, setSession } from '@/lib/api';
 
 type LoginResponse = {
   accessToken: string;
   user: {
+    id: string;
     role: string;
+    name: string;
+    email: string;
   };
+  store: {
+    id: string;
+    name: string;
+  } | null;
 };
 
 export default function AdminLogin() {
@@ -30,12 +37,15 @@ export default function AdminLogin() {
         body: JSON.stringify({ email, password }),
       });
 
-      if (data.user.role !== 'SUPER_ADMIN') {
-        throw new Error('Access denied. Super Admin privileges required.');
-      }
+      setSession({
+        accessToken: data.accessToken,
+        role: data.user.role,
+        storeId: data.store?.id || '',
+        name: data.user.name,
+        email: data.user.email,
+      });
 
-      localStorage.setItem('admin_token', data.accessToken);
-      router.replace('/dashboard');
+      router.replace(data.user.role === 'SUPER_ADMIN' ? '/dashboard' : '/store/dashboard');
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'Login failed');
     } finally {

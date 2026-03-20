@@ -19,6 +19,17 @@ type StoreRecord = {
     status: string;
     validUntil: string;
   } | null;
+  entitlement: {
+    packageCode: string;
+    maxDevices: number;
+    maxStaff: number;
+    maxSyncProfile: string;
+  };
+  counts: {
+    devices: number;
+    staff: number;
+    kitchenScreens: number;
+  };
 };
 
 type StoresResponse = {
@@ -120,22 +131,23 @@ export default function StoresPage() {
               <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-medium text-sm">
                 <th className="py-4 px-6">Store Name</th>
                 <th className="py-4 px-6">Owner Email</th>
-                <th className="py-4 px-6">Plan</th>
+                <th className="py-4 px-6">Package</th>
                 <th className="py-4 px-6">Access Mode</th>
+                <th className="py-4 px-6">Usage</th>
                 <th className="py-4 px-6 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-gray-500">
+                  <td colSpan={6} className="py-8 text-center text-gray-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF7B54] mx-auto mb-4" />
                     Loading stores...
                   </td>
                 </tr>
               ) : filteredStores.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-gray-500">
+                  <td colSpan={6} className="py-8 text-center text-gray-500">
                     No stores found.
                   </td>
                 </tr>
@@ -155,11 +167,16 @@ export default function StoresPage() {
                       <td className="py-4 px-6 text-gray-600">{store.owner.email}</td>
                       <td className="py-4 px-6">
                         <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold font-mono">
-                          {store.subscription?.plan || 'FREE'}
+                          {store.entitlement.packageCode}
                         </span>
                       </td>
                       <td className="py-4 px-6">
                         <AccessModeBadge mode={store.accessMode} />
+                      </td>
+                      <td className="py-4 px-6 text-sm text-gray-500">
+                        <div>Staff {store.counts.staff}/{store.entitlement.maxStaff}</div>
+                        <div>Devices {store.counts.devices}/{store.entitlement.maxDevices}</div>
+                        <div>Sync {store.entitlement.maxSyncProfile}</div>
                       </td>
                       <td className="py-4 px-6 text-right">
                         {canActivate ? (

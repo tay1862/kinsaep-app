@@ -13,7 +13,9 @@ final storeSettingsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
 });
 
 // ─── Categories ───
-final categoriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final categoriesProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
   final db = ref.watch(databaseProvider);
   return await db.getCategories();
 });
@@ -29,7 +31,9 @@ final itemsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
 
 final searchQueryProvider = StateProvider<String>((ref) => '');
 
-final searchItemsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final searchItemsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
   final db = ref.watch(databaseProvider);
   final query = ref.watch(searchQueryProvider);
   if (query.isEmpty) return [];
@@ -96,14 +100,18 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     state = state.where((e) => e.id != id).toList();
   }
 
-  void updateQuantity(String itemId, int delta) {
-    state = state.map((item) {
-      if (item.itemId == itemId) {
-        final newQty = item.quantity + delta;
-        return newQty > 0 ? item.copyWith(quantity: newQty) : item;
-      }
-      return item;
-    }).toList();
+  void updateQuantity(String cartEntryId, int delta) {
+    state =
+        state
+            .map((item) {
+              if (item.id == cartEntryId) {
+                final newQty = item.quantity + delta;
+                return newQty > 0 ? item.copyWith(quantity: newQty) : item;
+              }
+              return item;
+            })
+            .where((item) => item.quantity > 0)
+            .toList();
   }
 
   void addItemFromTicket({
@@ -115,7 +123,9 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     state = [
       ...state,
       CartItem(
-        id: DateTime.now().millisecondsSinceEpoch.toString(), // Generate a unique ID
+        id:
+            DateTime.now().millisecondsSinceEpoch
+                .toString(), // Generate a unique ID
         itemId: itemId,
         name: name,
         unitPrice: price,
@@ -171,15 +181,64 @@ final dailySummaryProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   return await db.getDailySummary(today);
 });
 
-final topItemsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final topItemsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
   final db = ref.watch(databaseProvider);
   final today = DateTime.now().toIso8601String().substring(0, 10);
   return await db.getTopItems(today);
 });
 
-final salesHistoryProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final salesHistoryProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
   final db = ref.watch(databaseProvider);
   return await db.getSales();
+});
+
+final staffProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  return db.getActiveStaff();
+});
+
+final devicesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  return db.getDevices();
+});
+
+final syncJobsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final db = ref.watch(databaseProvider);
+  return db.getSyncJobs();
+});
+
+final kitchenStationsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final db = ref.watch(databaseProvider);
+  return db.getKitchenStations();
+});
+
+final kitchenScreensProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final db = ref.watch(databaseProvider);
+  return db.getKitchenScreens();
+});
+
+final kitchenTicketsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final db = ref.watch(databaseProvider);
+  return db.getKitchenTickets();
+});
+
+final salesSummariesProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final db = ref.watch(databaseProvider);
+  return db.getSalesSummaries();
 });
 
 // ─── Navigation ───
@@ -189,9 +248,10 @@ final currentTabProvider = StateProvider<int>((ref) => 0);
 final currencyProvider = StateProvider<String>((ref) => 'LAK');
 
 // ─── Open Tickets & Tables ───
-final openTicketsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return DatabaseHelper.instance.getOpenTickets();
-});
+final openTicketsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return DatabaseHelper.instance.getOpenTickets();
+    });
 
 final activeTicketIdProvider = StateProvider<String?>((ref) => null);
 final activeTicketNameProvider = StateProvider<String?>((ref) => null);

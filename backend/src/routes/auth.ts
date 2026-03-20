@@ -1,8 +1,14 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { SyncProfile } from '@prisma/client';
 
 import { prisma } from '../lib/prisma';
+import {
+  createEntitlementSummary,
+  getEffectiveEntitlement,
+  resolveSubscriptionStatus,
+} from '../lib/storeAccess';
 import { createLocalPinHash } from '../utils/pinHash';
 
 export const authRouter = Router();
@@ -62,6 +68,21 @@ authRouter.post('/register', async (req, res: Response): Promise<void> => {
         },
       });
 
+      await tx.storeEntitlement.create({
+        data: {
+          storeId: store.id,
+          maxStaff: 1,
+          maxDevices: 1,
+          maxKitchenScreens: 0,
+          maxStations: 0,
+          allowMediaUpload: false,
+          maxSyncProfile: SyncProfile.OFF,
+          allowRawSalesSync: false,
+          retainRawSalesDays: 0,
+          overrideReason: 'Initial offline-only default',
+        },
+      });
+
       await tx.staff.create({
         data: {
           storeId: store.id,
@@ -86,6 +107,7 @@ authRouter.post('/register', async (req, res: Response): Promise<void> => {
 
     const accessToken = generateAccessToken(result.user.id, result.user.role, result.store.id);
     const refreshToken = generateRefreshToken(result.user.id);
+    const entitlement = await getEffectiveEntitlement(result.store.id);
 
     res.status(201).json({
       message:
@@ -100,6 +122,8 @@ authRouter.post('/register', async (req, res: Response): Promise<void> => {
         locale: result.store.locale,
       },
       subscriptionStatus: 'BLOCKED',
+      accessMode: entitlement.accessMode,
+      entitlement: createEntitlementSummary(entitlement),
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -141,6 +165,9 @@ authRouter.post('/login', async (req, res: Response): Promise<void> => {
     const storeId = store?.id;
 
     const subscriptionStatus = await resolveSubscriptionStatus(store?.subscription?.id ?? null);
+    const entitlement = storeId
+      ? await getEffectiveEntitlement(storeId)
+      : null;
 
     await prisma.activityLog.create({
       data: {
@@ -168,6 +195,8 @@ authRouter.post('/login', async (req, res: Response): Promise<void> => {
           }
         : null,
       subscriptionStatus,
+      accessMode: entitlement?.accessMode ?? 'OFFLINE_ONLY',
+      entitlement: entitlement ? createEntitlementSummary(entitlement) : null,
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -233,32 +262,6 @@ authRouter.post('/forgot-password', async (req, res: Response): Promise<void> =>
     res.status(500).json({ error: 'Failed to process request.' });
   }
 });
-
-async function resolveSubscriptionStatus(subscriptionId: string | null): Promise<string> {
-  if (!subscriptionId) {
-    return 'NONE';
-  }
-
-  const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
-  if (!subscription) {
-    return 'NONE';
-  }
-
-  if (subscription.status === 'BLOCKED' || subscription.status === 'CANCELLED') {
-    return 'BLOCKED';
-  }
-
-  const now = new Date();
-  if (subscription.status === 'ACTIVE' && now > subscription.validUntil) {
-    await prisma.subscription.update({
-      where: { id: subscription.id },
-      data: { status: 'EXPIRED' },
-    });
-    return 'EXPIRED';
-  }
-
-  return subscription.status;
-}
 
 function generateAccessToken(userId: string, role: string, storeId?: string): string {
   return jwt.sign({ userId, role, storeId }, process.env.JWT_SECRET!, {

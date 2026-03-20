@@ -19,19 +19,27 @@ class CurrencyUtil {
 
   static String symbol(String currencyCode) {
     switch (currencyCode) {
-      case 'LAK': return '₭';
-      case 'THB': return '฿';
-      case 'USD': return '\$';
-      default: return currencyCode;
+      case 'LAK':
+        return '₭';
+      case 'THB':
+        return '฿';
+      case 'USD':
+        return '\$';
+      default:
+        return currencyCode;
     }
   }
 
   static int decimals(String currencyCode) {
     switch (currencyCode) {
-      case 'LAK': return 0;
-      case 'THB': return 2;
-      case 'USD': return 2;
-      default: return 2;
+      case 'LAK':
+        return 0;
+      case 'THB':
+        return 2;
+      case 'USD':
+        return 2;
+      default:
+        return 2;
     }
   }
 
@@ -39,31 +47,34 @@ class CurrencyUtil {
   static List<double> quickAmounts(double total, String currencyCode) {
     switch (currencyCode) {
       case 'LAK':
-        return <double>[
-          _roundUp(total, 1000),
-          _roundUp(total, 5000),
-          _roundUp(total, 10000),
-          _roundUp(total, 50000),
-          100000.0,
-          200000.0,
-        ].toSet().toList()..sort();
+        return {
+            _roundUp(total, 1000),
+            _roundUp(total, 5000),
+            _roundUp(total, 10000),
+            _roundUp(total, 50000),
+            100000.0,
+            200000.0,
+          }.toList()
+          ..sort();
       case 'THB':
-        return <double>[
-          _roundUp(total, 10),
-          _roundUp(total, 20),
-          _roundUp(total, 100),
-          500.0,
-          1000.0,
-        ].toSet().toList()..sort();
+        return {
+            _roundUp(total, 10),
+            _roundUp(total, 20),
+            _roundUp(total, 100),
+            500.0,
+            1000.0,
+          }.toList()
+          ..sort();
       case 'USD':
-        return <double>[
-          _roundUp(total, 1),
-          _roundUp(total, 5),
-          _roundUp(total, 10),
-          20.0,
-          50.0,
-          100.0,
-        ].toSet().toList()..sort();
+        return {
+            _roundUp(total, 1),
+            _roundUp(total, 5),
+            _roundUp(total, 10),
+            20.0,
+            50.0,
+            100.0,
+          }.toList()
+          ..sort();
       default:
         return [total];
     }

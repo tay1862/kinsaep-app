@@ -2,6 +2,8 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 
 import { prisma } from '../lib/prisma';
+import { broadcastToStore } from '../lib/realtime';
+import { assertStoreLimit } from '../lib/storeAccess';
 import { AuthRequest } from '../middleware/auth';
 import { createLocalPinHash } from '../utils/pinHash';
 
@@ -17,7 +19,14 @@ staffRouter.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
     const staff = await prisma.staff.findMany({
       where: { storeId },
-      select: { id: true, name: true, role: true, isActive: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: { createdAt: 'asc' },
     });
     res.json(staff);
@@ -50,6 +59,8 @@ staffRouter.post('/', async (req: AuthRequest, res: Response): Promise<void> => 
       return;
     }
 
+    await assertStoreLimit(storeId, 'staff');
+
     const hashedPin = await bcrypt.hash(pin, 10);
     const staff = await prisma.staff.create({
       data: {
@@ -70,8 +81,25 @@ staffRouter.post('/', async (req: AuthRequest, res: Response): Promise<void> => 
       },
     });
 
-    res.status(201).json({ id: staff.id, name: staff.name, role: staff.role });
-  } catch {
+    broadcastToStore(storeId, 'staff.created', {
+      staffId: staff.id,
+      name: staff.name,
+      role: staff.role,
+    });
+
+    res.status(201).json({
+      id: staff.id,
+      name: staff.name,
+      role: staff.role,
+      isActive: staff.isActive,
+      createdAt: staff.createdAt,
+      updatedAt: staff.updatedAt,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'StoreLimitError') {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     res.status(500).json({ error: 'Failed to create staff.' });
   }
 });
@@ -137,6 +165,14 @@ staffRouter.patch('/:staffId', async (req: AuthRequest, res: Response): Promise<
     }
 
     const updated = await prisma.staff.update({ where: { id: staffId }, data });
+    if (req.storeId) {
+      broadcastToStore(req.storeId, 'staff.updated', {
+        staffId: updated.id,
+        name: updated.name,
+        role: updated.role,
+        isActive: updated.isActive,
+      });
+    }
     res.json({
       id: updated.id,
       name: updated.name,
@@ -150,8 +186,34 @@ staffRouter.patch('/:staffId', async (req: AuthRequest, res: Response): Promise<
 
 staffRouter.delete('/:staffId', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    await prisma.staff.delete({ where: { id: req.params.staffId } });
-    res.json({ message: 'Staff deleted.' });
+    const storeId = req.storeId;
+    const deleted = await prisma.staff.update({
+      where: { id: req.params.staffId },
+      data: { isActive: false },
+    });
+
+    if (storeId) {
+      await prisma.tombstone.create({
+        data: {
+          storeId,
+          entityType: 'STAFF',
+          entityId: deleted.id,
+        },
+      });
+      await prisma.activityLog.create({
+        data: {
+          userId: req.userId,
+          storeId,
+          action: 'DELETE_STAFF',
+          details: { staffId: deleted.id, staffName: deleted.name },
+        },
+      });
+      broadcastToStore(storeId, 'staff.deleted', {
+        staffId: deleted.id,
+      });
+    }
+
+    res.json({ message: 'Staff deactivated.' });
   } catch {
     res.status(500).json({ error: 'Failed to delete staff.' });
   }

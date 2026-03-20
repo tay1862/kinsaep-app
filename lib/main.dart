@@ -4,11 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:kinsaep_pos/app/theme.dart';
+import 'package:kinsaep_pos/core/network/cloud_state.dart';
 import 'package:kinsaep_pos/core/providers/app_providers.dart';
+import 'package:kinsaep_pos/features/kitchen/screens/kitchen_console_screen.dart';
+import 'package:kinsaep_pos/features/more/screens/more_screen.dart';
 import 'package:kinsaep_pos/features/pos/screens/pos_screen.dart';
 import 'package:kinsaep_pos/features/items/screens/items_screen.dart';
+import 'package:kinsaep_pos/features/pos/screens/tickets_screen.dart';
 import 'package:kinsaep_pos/features/reports/screens/reports_screen.dart';
-import 'package:kinsaep_pos/features/settings/screens/settings_screen.dart';
 import 'package:kinsaep_pos/features/auth/screens/pin_lock_screen.dart';
 import 'package:kinsaep_pos/features/auth/screens/setup_wizard_screen.dart';
 
@@ -62,8 +65,15 @@ class KinsaepApp extends ConsumerWidget {
       locale: locale,
       home: settingsAsync.when(
         data: (data) {
+          final deviceType =
+              (data['deviceType'] as String?) ?? DeviceTypeState.pos;
           if (data['isSetupComplete'] == 1) {
-            return const PinLockScreen(child: MainShell());
+            return PinLockScreen(
+              child:
+                  deviceType == DeviceTypeState.kitchen
+                      ? const KitchenConsoleScreen()
+                      : const MainShell(),
+            );
           }
           return const SetupWizardScreen();
         },
@@ -89,9 +99,10 @@ class MainShell extends ConsumerWidget {
 
     final screens = [
       const PosScreen(),
+      const TicketsScreen(),
       const ItemsScreen(),
       const ReportsScreen(),
-      const SettingsScreen(),
+      const MoreScreen(),
     ];
 
     return Scaffold(
@@ -115,27 +126,33 @@ class MainShell extends ConsumerWidget {
               children: [
                 _NavItem(
                   icon: Icons.point_of_sale_rounded,
-                  label: l10n.pos,
+                  label: 'Sell',
                   isSelected: currentTab == 0,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 0,
                 ),
                 _NavItem(
-                  icon: Icons.inventory_2_rounded,
-                  label: l10n.items,
+                  icon: Icons.receipt_long_rounded,
+                  label: 'Orders',
                   isSelected: currentTab == 1,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 1,
                 ),
                 _NavItem(
-                  icon: Icons.bar_chart_rounded,
-                  label: l10n.reports,
+                  icon: Icons.inventory_2_rounded,
+                  label: 'Catalog',
                   isSelected: currentTab == 2,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 2,
                 ),
                 _NavItem(
-                  icon: Icons.settings_rounded,
-                  label: l10n.settings,
+                  icon: Icons.bar_chart_rounded,
+                  label: l10n.reports,
                   isSelected: currentTab == 3,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 3,
+                ),
+                _NavItem(
+                  icon: Icons.dashboard_customize_rounded,
+                  label: 'More',
+                  isSelected: currentTab == 4,
+                  onTap: () => ref.read(currentTabProvider.notifier).state = 4,
                 ),
               ],
             ),

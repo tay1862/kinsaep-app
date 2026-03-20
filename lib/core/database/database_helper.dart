@@ -21,7 +21,7 @@ class DatabaseHelper {
     final path = join(dir.path, fileName);
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -91,6 +91,148 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE store_settings ADD COLUMN lastSyncAt TEXT');
       await _migrateLegacyPins(db);
     }
+    if (oldVersion < 8) {
+      await db.execute("ALTER TABLE items ADD COLUMN kitchenStationId TEXT");
+      await db.execute('ALTER TABLE items ADD COLUMN imageUrl TEXT');
+      await db.execute("ALTER TABLE store_settings ADD COLUMN deviceId TEXT");
+      await db.execute(
+        "ALTER TABLE store_settings ADD COLUMN deviceName TEXT NOT NULL DEFAULT 'This Device'",
+      );
+      await db.execute(
+        "ALTER TABLE store_settings ADD COLUMN deviceType TEXT NOT NULL DEFAULT 'POS'",
+      );
+      await db.execute(
+        "ALTER TABLE store_settings ADD COLUMN scannerMode TEXT NOT NULL DEFAULT 'AUTO'",
+      );
+      await db.execute(
+        "ALTER TABLE store_settings ADD COLUMN syncProfile TEXT NOT NULL DEFAULT 'LIGHT'",
+      );
+      await db.execute('ALTER TABLE store_settings ADD COLUMN printerMac TEXT');
+      await db.execute(
+        'ALTER TABLE store_settings ADD COLUMN printerName TEXT',
+      );
+      await db.execute(
+        "ALTER TABLE store_settings ADD COLUMN currentSyncStatus TEXT NOT NULL DEFAULT 'IDLE'",
+      );
+      await db.execute(
+        'ALTER TABLE store_settings ADD COLUMN lastSyncProgress INTEGER NOT NULL DEFAULT 0',
+      );
+      await db.execute(
+        'ALTER TABLE store_settings ADD COLUMN lastSyncError TEXT',
+      );
+      await db.execute(
+        "ALTER TABLE staff ADD COLUMN updatedAt TEXT DEFAULT ''",
+      );
+      await db.execute('''
+        CREATE TABLE devices (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL DEFAULT 'POS',
+          platform TEXT NOT NULL DEFAULT 'ANDROID',
+          scannerMode TEXT NOT NULL DEFAULT 'AUTO',
+          syncProfile TEXT NOT NULL DEFAULT 'OFF',
+          status TEXT NOT NULL DEFAULT 'OFFLINE',
+          isActive INTEGER NOT NULL DEFAULT 1,
+          lastSeenAt TEXT,
+          createdAt TEXT,
+          updatedAt TEXT
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE sync_jobs (
+          id TEXT PRIMARY KEY,
+          direction TEXT NOT NULL,
+          status TEXT NOT NULL,
+          progress INTEGER NOT NULL DEFAULT 0,
+          scopes TEXT,
+          error TEXT,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE tombstones (
+          id TEXT PRIMARY KEY,
+          entityType TEXT NOT NULL,
+          entityId TEXT NOT NULL,
+          payload TEXT,
+          deletedAt TEXT NOT NULL,
+          syncStatus TEXT NOT NULL DEFAULT 'PENDING'
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE media_assets (
+          id TEXT PRIMARY KEY,
+          itemId TEXT,
+          fileName TEXT NOT NULL,
+          mimeType TEXT NOT NULL,
+          imagePath TEXT,
+          thumbnailBase64 TEXT,
+          remoteUrl TEXT,
+          syncStatus TEXT NOT NULL DEFAULT 'PENDING',
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE kitchen_stations (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL,
+          isActive INTEGER NOT NULL DEFAULT 1,
+          createdAt TEXT,
+          updatedAt TEXT
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE kitchen_screens (
+          id TEXT PRIMARY KEY,
+          stationId TEXT NOT NULL,
+          deviceId TEXT NOT NULL,
+          label TEXT NOT NULL,
+          isActive INTEGER NOT NULL DEFAULT 1,
+          createdAt TEXT,
+          updatedAt TEXT
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE kitchen_tickets (
+          id TEXT PRIMARY KEY,
+          saleId TEXT,
+          sourceDeviceId TEXT,
+          status TEXT NOT NULL DEFAULT 'NEW',
+          note TEXT,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL,
+          syncStatus TEXT NOT NULL DEFAULT 'SYNCED'
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE kitchen_ticket_items (
+          id TEXT PRIMARY KEY,
+          ticketId TEXT NOT NULL,
+          itemId TEXT,
+          stationId TEXT,
+          itemName TEXT NOT NULL,
+          quantity REAL NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'NEW',
+          note TEXT,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE sales_summaries (
+          id TEXT PRIMARY KEY,
+          businessDay TEXT NOT NULL,
+          totalOrders INTEGER NOT NULL DEFAULT 0,
+          totalSales REAL NOT NULL DEFAULT 0,
+          cashTotal REAL NOT NULL DEFAULT 0,
+          otherTotal REAL NOT NULL DEFAULT 0,
+          updatedAt TEXT NOT NULL
+        )
+      ''');
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -118,6 +260,8 @@ class DatabaseHelper {
         barcode TEXT,
         sku TEXT,
         imagePath TEXT,
+        imageUrl TEXT,
+        kitchenStationId TEXT,
         trackStock INTEGER NOT NULL DEFAULT 0,
         stockQuantity REAL NOT NULL DEFAULT 0,
         lowStockThreshold REAL NOT NULL DEFAULT 5,
@@ -190,7 +334,17 @@ class DatabaseHelper {
         cloudMode TEXT NOT NULL DEFAULT 'OFFLINE_ONLY',
         subscriptionStatus TEXT NOT NULL DEFAULT 'NONE',
         remoteStoreId TEXT,
-        lastSyncAt TEXT
+        lastSyncAt TEXT,
+        deviceId TEXT,
+        deviceName TEXT NOT NULL DEFAULT 'This Device',
+        deviceType TEXT NOT NULL DEFAULT 'POS',
+        scannerMode TEXT NOT NULL DEFAULT 'AUTO',
+        syncProfile TEXT NOT NULL DEFAULT 'LIGHT',
+        printerMac TEXT,
+        printerName TEXT,
+        currentSyncStatus TEXT NOT NULL DEFAULT 'IDLE',
+        lastSyncProgress INTEGER NOT NULL DEFAULT 0,
+        lastSyncError TEXT
       )
     ''');
 
@@ -208,6 +362,12 @@ class DatabaseHelper {
       'syncEnabled': 0,
       'cloudMode': CloudMode.offlineOnly,
       'subscriptionStatus': CloudSubscriptionStatus.none,
+      'deviceName': 'This Device',
+      'deviceType': 'POS',
+      'scannerMode': 'AUTO',
+      'syncProfile': 'LIGHT',
+      'currentSyncStatus': 'IDLE',
+      'lastSyncProgress': 0,
     });
 
     // ─── Staff (RBAC & PINs) ───
@@ -220,6 +380,124 @@ class DatabaseHelper {
         isActive INTEGER NOT NULL DEFAULT 1,
         createdAt TEXT,
         updatedAt TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE devices (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'POS',
+        platform TEXT NOT NULL DEFAULT 'ANDROID',
+        scannerMode TEXT NOT NULL DEFAULT 'AUTO',
+        syncProfile TEXT NOT NULL DEFAULT 'OFF',
+        status TEXT NOT NULL DEFAULT 'OFFLINE',
+        isActive INTEGER NOT NULL DEFAULT 1,
+        lastSeenAt TEXT,
+        createdAt TEXT,
+        updatedAt TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE sync_jobs (
+        id TEXT PRIMARY KEY,
+        direction TEXT NOT NULL,
+        status TEXT NOT NULL,
+        progress INTEGER NOT NULL DEFAULT 0,
+        scopes TEXT,
+        error TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE tombstones (
+        id TEXT PRIMARY KEY,
+        entityType TEXT NOT NULL,
+        entityId TEXT NOT NULL,
+        payload TEXT,
+        deletedAt TEXT NOT NULL,
+        syncStatus TEXT NOT NULL DEFAULT 'PENDING'
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE media_assets (
+        id TEXT PRIMARY KEY,
+        itemId TEXT,
+        fileName TEXT NOT NULL,
+        mimeType TEXT NOT NULL,
+        imagePath TEXT,
+        thumbnailBase64 TEXT,
+        remoteUrl TEXT,
+        syncStatus TEXT NOT NULL DEFAULT 'PENDING',
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE kitchen_stations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        isActive INTEGER NOT NULL DEFAULT 1,
+        createdAt TEXT,
+        updatedAt TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE kitchen_screens (
+        id TEXT PRIMARY KEY,
+        stationId TEXT NOT NULL,
+        deviceId TEXT NOT NULL,
+        label TEXT NOT NULL,
+        isActive INTEGER NOT NULL DEFAULT 1,
+        createdAt TEXT,
+        updatedAt TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE kitchen_tickets (
+        id TEXT PRIMARY KEY,
+        saleId TEXT,
+        sourceDeviceId TEXT,
+        status TEXT NOT NULL DEFAULT 'NEW',
+        note TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        syncStatus TEXT NOT NULL DEFAULT 'SYNCED'
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE kitchen_ticket_items (
+        id TEXT PRIMARY KEY,
+        ticketId TEXT NOT NULL,
+        itemId TEXT,
+        stationId TEXT,
+        itemName TEXT NOT NULL,
+        quantity REAL NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'NEW',
+        note TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE sales_summaries (
+        id TEXT PRIMARY KEY,
+        businessDay TEXT NOT NULL,
+        totalOrders INTEGER NOT NULL DEFAULT 0,
+        totalSales REAL NOT NULL DEFAULT 0,
+        cashTotal REAL NOT NULL DEFAULT 0,
+        otherTotal REAL NOT NULL DEFAULT 0,
+        updatedAt TEXT NOT NULL
       )
     ''');
 
@@ -297,6 +575,7 @@ class DatabaseHelper {
 
   Future<int> deleteCategory(String id) async {
     final db = await database;
+    await createTombstone('CATEGORY', id);
     return await db.delete('categories', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -336,6 +615,26 @@ class DatabaseHelper {
     );
   }
 
+  Future<Map<String, dynamic>?> findItemByCode(String code) async {
+    final db = await database;
+    final rows = await db.query(
+      'items',
+      where: '(barcode = ? OR sku = ?) AND isActive = 1',
+      whereArgs: [code, code],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getItemsByIds(List<String> ids) async {
+    if (ids.isEmpty) {
+      return [];
+    }
+    final db = await database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    return db.query('items', where: 'id IN ($placeholders)', whereArgs: ids);
+  }
+
   Future<int> updateItem(String id, Map<String, dynamic> row) async {
     final db = await database;
     final data = Map<String, dynamic>.from(row);
@@ -344,8 +643,18 @@ class DatabaseHelper {
     return await db.update('items', data, where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<int> updateItemSilently(String id, Map<String, dynamic> row) async {
+    final db = await database;
+    final data = Map<String, dynamic>.from(row);
+    if (!data.containsKey('updatedAt')) {
+      data['updatedAt'] = DateTime.now().toIso8601String();
+    }
+    return await db.update('items', data, where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<int> deleteItem(String id) async {
     final db = await database;
+    await createTombstone('ITEM', id);
     return await db.update(
       'items',
       {
@@ -596,6 +905,437 @@ class DatabaseHelper {
   Future<int> updateSettings(Map<String, dynamic> row) async {
     final db = await database;
     return await db.update('store_settings', row, where: 'id = 1');
+  }
+
+  Future<String> getOrCreateDeviceId() async {
+    final settings = await getSettings();
+    final existing = settings['deviceId'] as String?;
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+
+    final deviceId = 'device-${DateTime.now().millisecondsSinceEpoch}';
+    await updateSettings({'deviceId': deviceId});
+    return deviceId;
+  }
+
+  Future<void> createTombstone(
+    String entityType,
+    String entityId, {
+    String? payload,
+  }) async {
+    final db = await database;
+    await db.insert('tombstones', {
+      'id':
+          '${entityType.toLowerCase()}-$entityId-${DateTime.now().millisecondsSinceEpoch}',
+      'entityType': entityType,
+      'entityId': entityId,
+      'payload': payload,
+      'deletedAt': DateTime.now().toIso8601String(),
+      'syncStatus': 'PENDING',
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingTombstones() async {
+    final db = await database;
+    return db.query('tombstones', where: "syncStatus = 'PENDING'");
+  }
+
+  Future<void> markTombstonesSynced(List<Object?> ids) async {
+    if (ids.isEmpty) {
+      return;
+    }
+    final db = await database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.update(
+      'tombstones',
+      {'syncStatus': 'SYNCED'},
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
+  }
+
+  Future<void> saveSyncJob(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert(
+      'sync_jobs',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getSyncJobs({int limit = 20}) async {
+    final db = await database;
+    return db.query('sync_jobs', orderBy: 'createdAt DESC', limit: limit);
+  }
+
+  Future<void> upsertDevice(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert(
+      'devices',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getDevices() async {
+    final db = await database;
+    return db.query('devices', orderBy: 'createdAt ASC');
+  }
+
+  Future<List<Map<String, dynamic>>> getActiveStaff() async {
+    final db = await database;
+    return db.query('staff', where: 'isActive = 1', orderBy: 'createdAt ASC');
+  }
+
+  Future<void> upsertStaffMember(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert('staff', row, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateStaffMember(String id, Map<String, dynamic> row) async {
+    final db = await database;
+    await db.update('staff', row, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> saveMediaAsset(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert(
+      'media_assets',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingMediaAssets() async {
+    final db = await database;
+    return db.query('media_assets', where: "syncStatus = 'PENDING'");
+  }
+
+  Future<Map<String, dynamic>?> getMediaAssetForItem(String itemId) async {
+    final db = await database;
+    final rows = await db.query(
+      'media_assets',
+      where: 'itemId = ?',
+      whereArgs: [itemId],
+      orderBy: 'updatedAt DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<void> markMediaAssetSynced(String id, {String? remoteUrl}) async {
+    final db = await database;
+    await db.update(
+      'media_assets',
+      {
+        'syncStatus': 'SYNCED',
+        if (remoteUrl != null) 'remoteUrl': remoteUrl,
+        'updatedAt': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> replaceKitchenSnapshot({
+    required List<Map<String, dynamic>> stations,
+    required List<Map<String, dynamic>> screens,
+    required List<Map<String, dynamic>> tickets,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('kitchen_stations');
+      await txn.delete('kitchen_screens');
+      await txn.delete('kitchen_tickets');
+      await txn.delete('kitchen_ticket_items');
+
+      for (final station in stations) {
+        await txn.insert('kitchen_stations', station);
+      }
+      for (final screen in screens) {
+        await txn.insert('kitchen_screens', screen);
+      }
+      for (final ticket in tickets) {
+        final ticketData = Map<String, dynamic>.from(ticket);
+        final items = (ticketData.remove('items') as List<dynamic>? ?? []);
+        await txn.insert('kitchen_tickets', ticketData);
+        for (final item in items.cast<Map<String, dynamic>>()) {
+          await txn.insert('kitchen_ticket_items', item);
+        }
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getKitchenStations() async {
+    final db = await database;
+    return db.query('kitchen_stations', orderBy: 'createdAt ASC');
+  }
+
+  Future<List<Map<String, dynamic>>> getKitchenScreens() async {
+    final db = await database;
+    return db.query('kitchen_screens', orderBy: 'createdAt ASC');
+  }
+
+  Future<void> saveKitchenStation(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert(
+      'kitchen_stations',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> saveKitchenScreen(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert(
+      'kitchen_screens',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> ensureDefaultKitchenStations() async {
+    final db = await database;
+    final existing = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM kitchen_stations'),
+    );
+    if ((existing ?? 0) > 0) {
+      return;
+    }
+
+    final now = DateTime.now().toIso8601String();
+    final defaults = [
+      {'id': 'station-hot', 'name': 'Hot Kitchen', 'type': 'HOT'},
+      {'id': 'station-cold', 'name': 'Cold Kitchen', 'type': 'COLD'},
+      {'id': 'station-drink', 'name': 'Drink Bar', 'type': 'DRINK'},
+    ];
+    for (final station in defaults) {
+      await db.insert('kitchen_stations', {
+        ...station,
+        'isActive': 1,
+        'createdAt': now,
+        'updatedAt': now,
+      });
+    }
+  }
+
+  Future<void> saveKitchenTicket(Map<String, dynamic> ticket) async {
+    final db = await database;
+    await db.insert(
+      'kitchen_tickets',
+      ticket,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> replaceKitchenTicketItems(
+    String ticketId,
+    List<Map<String, dynamic>> items,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'kitchen_ticket_items',
+        where: 'ticketId = ?',
+        whereArgs: [ticketId],
+      );
+      for (final item in items) {
+        await txn.insert('kitchen_ticket_items', item);
+      }
+    });
+  }
+
+  Future<void> updateKitchenTicketStatus(String ticketId, String status) async {
+    final db = await database;
+    await db.update(
+      'kitchen_tickets',
+      {
+        'status': status,
+        'updatedAt': DateTime.now().toIso8601String(),
+        'syncStatus': 'PENDING',
+      },
+      where: 'id = ?',
+      whereArgs: [ticketId],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingKitchenTickets() async {
+    final db = await database;
+    final tickets = await db.query(
+      'kitchen_tickets',
+      where: "syncStatus = 'PENDING'",
+      orderBy: 'createdAt ASC',
+    );
+    final result = <Map<String, dynamic>>[];
+    for (final ticket in tickets) {
+      final items = await db.query(
+        'kitchen_ticket_items',
+        where: 'ticketId = ?',
+        whereArgs: [ticket['id']],
+      );
+      result.add({...ticket, 'items': items});
+    }
+    return result;
+  }
+
+  Future<void> markKitchenTicketsSynced(List<Object?> ids) async {
+    if (ids.isEmpty) {
+      return;
+    }
+    final db = await database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.update(
+      'kitchen_tickets',
+      {'syncStatus': 'SYNCED'},
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getKitchenTickets() async {
+    final db = await database;
+    final tickets = await db.query(
+      'kitchen_tickets',
+      orderBy: 'createdAt DESC',
+    );
+
+    final result = <Map<String, dynamic>>[];
+    for (final ticket in tickets) {
+      final items = await db.query(
+        'kitchen_ticket_items',
+        where: 'ticketId = ?',
+        whereArgs: [ticket['id']],
+      );
+      result.add({...ticket, 'items': items});
+    }
+    return result;
+  }
+
+  Future<void> replaceSalesSummaries(
+    List<Map<String, dynamic>> summaries,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final summary in summaries) {
+        await txn.insert(
+          'sales_summaries',
+          summary,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getSalesSummaries() async {
+    final db = await database;
+    return db.query('sales_summaries', orderBy: 'businessDay DESC');
+  }
+
+  Future<void> upsertCategoryRemote(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert(
+      'categories',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> upsertItemRemote(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert('items', row, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> upsertSaleRemote(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert('sales', row, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> replaceSaleItemsForSale(
+    String saleId,
+    List<Map<String, dynamic>> items,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('sale_items', where: 'saleId = ?', whereArgs: [saleId]);
+      for (final item in items) {
+        await txn.insert('sale_items', item);
+      }
+    });
+  }
+
+  Future<void> upsertShiftRemote(Map<String, dynamic> row) async {
+    final db = await database;
+    await db.insert(
+      'shifts',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> applyTombstone(Map<String, dynamic> tombstone) async {
+    final db = await database;
+    await db.insert(
+      'tombstones',
+      tombstone,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    switch (tombstone['entityType']) {
+      case 'CATEGORY':
+        await db.delete(
+          'categories',
+          where: 'id = ?',
+          whereArgs: [tombstone['entityId']],
+        );
+        break;
+      case 'ITEM':
+        await db.update(
+          'items',
+          {
+            'isActive': 0,
+            'updatedAt': DateTime.now().toIso8601String(),
+            'syncStatus': 'SYNCED',
+          },
+          where: 'id = ?',
+          whereArgs: [tombstone['entityId']],
+        );
+        break;
+      case 'STAFF':
+        await db.update(
+          'staff',
+          {'isActive': 0, 'updatedAt': DateTime.now().toIso8601String()},
+          where: 'id = ?',
+          whereArgs: [tombstone['entityId']],
+        );
+        break;
+      case 'DEVICE':
+        await db.update(
+          'devices',
+          {
+            'isActive': 0,
+            'status': 'BLOCKED',
+            'updatedAt': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [tombstone['entityId']],
+        );
+        break;
+    }
+  }
+
+  Future<void> updateSyncState({
+    required String status,
+    required int progress,
+    String? error,
+    String? lastSyncAt,
+  }) async {
+    await updateSettings({
+      'currentSyncStatus': status,
+      'lastSyncProgress': progress,
+      'lastSyncError': error,
+      if (lastSyncAt != null) 'lastSyncAt': lastSyncAt,
+    });
   }
 
   Future<int> getNextReceiptNumber() async {

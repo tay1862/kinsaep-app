@@ -1,15 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:kinsaep_pos/app/theme.dart';
+import 'package:kinsaep_pos/core/database/database_helper.dart';
+import 'package:kinsaep_pos/core/network/cloud_state.dart';
 import 'package:kinsaep_pos/core/providers/app_providers.dart';
+import 'package:kinsaep_pos/core/services/vendor_scanner_service.dart';
 import 'package:kinsaep_pos/core/utils/currency_util.dart';
 import 'package:kinsaep_pos/features/pos/widgets/cart_panel.dart';
 import 'package:kinsaep_pos/features/pos/screens/tickets_screen.dart';
 import 'package:kinsaep_pos/features/pos/widgets/modifier_selector_sheet.dart';
 import 'package:kinsaep_pos/features/pos/screens/barcode_scanner_screen.dart';
-
 
 class PosScreen extends ConsumerStatefulWidget {
   const PosScreen({super.key});
@@ -20,12 +24,26 @@ class PosScreen extends ConsumerStatefulWidget {
 
 class _PosScreenState extends ConsumerState<PosScreen> {
   final _searchController = TextEditingController();
-  final _searchFocusNode = FocusNode(); // Added FocusNode
+  final _searchFocusNode = FocusNode();
+  String _scannerBuffer = '';
+  Timer? _scannerDebounce;
+  StreamSubscription<VendorScanEvent>? _vendorScannerSubscription;
   bool _isSearching = false;
 
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleHardwareKey);
+    _vendorScannerSubscription = VendorScannerService.events.listen((event) {
+      final settings = ref.read(storeSettingsProvider).valueOrNull;
+      final scannerMode =
+          (settings?['scannerMode'] as String?) ?? ScannerModeState.auto;
+      if (scannerMode == ScannerModeState.sunmi ||
+          scannerMode == ScannerModeState.zebra ||
+          scannerMode == ScannerModeState.auto) {
+        _addScannedCode(event.code);
+      }
+    });
     ref.listenManual(searchQueryProvider, (previous, next) {
       setState(() => _isSearching = next.isNotEmpty);
     });
@@ -33,9 +51,53 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleHardwareKey);
+    _scannerDebounce?.cancel();
+    _vendorScannerSubscription?.cancel();
     _searchController.dispose();
-    _searchFocusNode.dispose(); // Dispose FocusNode
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  bool _handleHardwareKey(KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return false;
+    }
+
+    final settings = ref.read(storeSettingsProvider).valueOrNull;
+    final scannerMode =
+        (settings?['scannerMode'] as String?) ?? ScannerModeState.auto;
+    if (scannerMode == ScannerModeState.camera) {
+      return false;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
+      _flushScannerBuffer();
+      return false;
+    }
+
+    final character = event.character;
+    if (character == null || character.isEmpty || character.trim().isEmpty) {
+      return false;
+    }
+
+    _scannerBuffer += character;
+    _scannerDebounce?.cancel();
+    _scannerDebounce = Timer(
+      const Duration(milliseconds: 90),
+      _flushScannerBuffer,
+    );
+    return false;
+  }
+
+  Future<void> _flushScannerBuffer() async {
+    _scannerDebounce?.cancel();
+    final code = _scannerBuffer.trim();
+    _scannerBuffer = '';
+    if (code.isEmpty) {
+      return;
+    }
+    await _addScannedCode(code);
   }
 
   Future<void> _openScanner() async {
@@ -43,40 +105,51 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       context,
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
     );
-    
+
     if (barcode != null && barcode.isNotEmpty && mounted) {
-      final itemsList = ref.read(itemsProvider).value ?? [];
-      final match = itemsList.where((i) => i['barcode'] == barcode || i['sku'] == barcode).toList();
-      
-      if (match.isNotEmpty) {
-        final item = match.first;
-        final modifiers = item['modifiers'] as String? ?? '[]';
-        if (modifiers != '[]') {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => ModifierSelectorSheet(
-              item: item,
-              modifiersJson: modifiers,
-            ),
-          );
-        } else {
-          ref.read(cartProvider.notifier).addItem(
-            item['id'] as String,
-            item['name'] as String,
-            (item['price'] as num).toDouble(),
-          );
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Added ${item['name']}'), duration: const Duration(seconds: 1)),
-          );
-        }
+      await _addScannedCode(barcode);
+    }
+  }
+
+  Future<void> _addScannedCode(String code) async {
+    final item = await DatabaseHelper.instance.findItemByCode(code);
+
+    if (!mounted) {
+      return;
+    }
+
+    if (item != null) {
+      final modifiers = item['modifiers'] as String? ?? '[]';
+      if (modifiers != '[]') {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder:
+              (_) =>
+                  ModifierSelectorSheet(item: item, modifiersJson: modifiers),
+        );
       } else {
+        ref
+            .read(cartProvider.notifier)
+            .addItem(
+              item['id'] as String,
+              item['name'] as String,
+              (item['price'] as num).toDouble(),
+            );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No item found for barcode: $barcode')),
+          SnackBar(
+            content: Text('Added ${item['name']}'),
+            duration: const Duration(seconds: 1),
+          ),
         );
       }
+      return;
     }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('No item found for barcode: $code')));
   }
 
   @override
@@ -116,7 +189,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column( // Removed SafeArea and the old top bar Container
+      body: Column(
         children: [
           // ─── Search Field (conditionally displayed) ───
           if (_isSearching)
@@ -129,13 +202,19 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 autofocus: true,
                 decoration: InputDecoration(
                   hintText: l10n.searchItems,
-                  prefixIcon: const Icon(Icons.search_rounded, color: KinsaepTheme.textSecondary),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: KinsaepTheme.textSecondary,
+                  ),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (_isSearching)
                         IconButton(
-                          icon: const Icon(Icons.close_rounded, color: KinsaepTheme.error),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: KinsaepTheme.error,
+                          ),
                           onPressed: () {
                             FocusScope.of(context).unfocus();
                             ref.read(searchQueryProvider.notifier).state = '';
@@ -143,7 +222,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                           },
                         ),
                       IconButton(
-                        icon: const Icon(Icons.qr_code_scanner_rounded, color: KinsaepTheme.primary),
+                        icon: const Icon(
+                          Icons.qr_code_scanner_rounded,
+                          color: KinsaepTheme.primary,
+                        ),
                         onPressed: _openScanner,
                       ),
                     ],
@@ -154,137 +236,176 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
-                onChanged: (v) => ref.read(searchQueryProvider.notifier).state = v,
+                onChanged:
+                    (v) => ref.read(searchQueryProvider.notifier).state = v,
               ),
             ),
 
-            // ─── Category Tabs ───
-            if (!_isSearching)
-              Container(
-                height: 52,
-                color: Colors.white,
-                child: categories.when(
-                  data: (cats) => ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    children: [
-                      _CategoryChip(
-                        label: l10n.allCategories,
-                        isSelected: selectedCategory == null,
-                        color: KinsaepTheme.primary,
-                        onTap: () => ref.read(selectedCategoryProvider.notifier).state = null,
+          // ─── Category Tabs ───
+          if (!_isSearching)
+            Container(
+              height: 52,
+              color: Colors.white,
+              child: categories.when(
+                data:
+                    (cats) => ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
                       ),
-                      ...cats.map((cat) => _CategoryChip(
-                        label: cat['name'] as String,
-                        isSelected: selectedCategory == cat['id'],
-                        color: Color(cat['color'] as int),
-                        onTap: () => ref.read(selectedCategoryProvider.notifier).state = cat['id'] as String,
-                      )),
-                    ],
-                  ),
-                  loading: () => const SizedBox(),
-                  error: (_, __) => const SizedBox(),
-                ),
+                      children: [
+                        _CategoryChip(
+                          label: l10n.allCategories,
+                          isSelected: selectedCategory == null,
+                          color: KinsaepTheme.primary,
+                          onTap:
+                              () =>
+                                  ref
+                                      .read(selectedCategoryProvider.notifier)
+                                      .state = null,
+                        ),
+                        ...cats.map(
+                          (cat) => _CategoryChip(
+                            label: cat['name'] as String,
+                            isSelected: selectedCategory == cat['id'],
+                            color: Color(cat['color'] as int),
+                            onTap:
+                                () =>
+                                    ref
+                                        .read(selectedCategoryProvider.notifier)
+                                        .state = cat['id'] as String,
+                          ),
+                        ),
+                      ],
+                    ),
+                loading: () => const SizedBox(),
+                error: (_, __) => const SizedBox(),
               ),
-
-            // ─── Items Grid ───
-            Expanded(
-              child: _isSearching
-                  ? _buildSearchResults(ref, currency)
-                  : _buildItemsGrid(items, ref, currency, l10n),
             ),
 
-            // ─── Cart Summary Bar ───
-            if (cartItems.isNotEmpty)
-              GestureDetector(
-                onTap: () => _showCartPanel(context),
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  decoration: BoxDecoration(
-                    gradient: KinsaepTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: KinsaepTheme.primary.withValues(alpha: 0.35),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
+          // ─── Items Grid ───
+          Expanded(
+            child:
+                _isSearching
+                    ? _buildSearchResults(ref, currency)
+                    : _buildItemsGrid(items, ref, currency, l10n),
+          ),
+
+          // ─── Cart Summary Bar ───
+          if (cartItems.isNotEmpty)
+            GestureDetector(
+              onTap: () => _showCartPanel(context),
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  gradient: KinsaepTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: KinsaepTheme.primary.withValues(alpha: 0.35),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Cart badge
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Cart badge
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 18),
-                            const SizedBox(width: 6),
-                            Text(
-                              '$cartCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Spacer(),
-                      // Total
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(l10n.total, style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8), fontSize: 11, fontWeight: FontWeight.w500,
-                          )),
+                          const Icon(
+                            Icons.shopping_cart_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
                           Text(
-                            CurrencyUtil.format(subtotal, currency),
+                            '$cartCount',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 20,
                               fontWeight: FontWeight.w800,
+                              fontSize: 15,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(width: 16),
-                      // Charge button
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          l10n.charge,
-                          style: const TextStyle(
-                            color: KinsaepTheme.primary,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
+                    ),
+                    const Spacer(),
+                    // Total
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          l10n.total,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
+                        Text(
+                          CurrencyUtil.format(subtotal, currency),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 16),
+                    // Charge button
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
                       ),
-                    ],
-                  ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        l10n.charge,
+                        style: const TextStyle(
+                          color: KinsaepTheme.primary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildItemsGrid(AsyncValue<List<Map<String, dynamic>>> items, WidgetRef ref, String currency, AppLocalizations l10n) {
+  Widget _buildItemsGrid(
+    AsyncValue<List<Map<String, dynamic>>> items,
+    WidgetRef ref,
+    String currency,
+    AppLocalizations l10n,
+  ) {
     return items.when(
       data: (itemList) {
         if (itemList.isEmpty) {
@@ -298,16 +419,29 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     color: KinsaepTheme.primary.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.inventory_2_outlined, size: 48, color: KinsaepTheme.primary.withValues(alpha: 0.5)),
+                  child: Icon(
+                    Icons.inventory_2_outlined,
+                    size: 48,
+                    color: KinsaepTheme.primary.withValues(alpha: 0.5),
+                  ),
                 ),
                 const SizedBox(height: 16),
-                Text(l10n.noItems, style: const TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w600, color: KinsaepTheme.textSecondary,
-                )),
+                Text(
+                  l10n.noItems,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: KinsaepTheme.textSecondary,
+                  ),
+                ),
                 const SizedBox(height: 8),
-                Text(l10n.addYourFirstItem, style: const TextStyle(
-                  fontSize: 14, color: KinsaepTheme.textSecondary,
-                )),
+                Text(
+                  l10n.addYourFirstItem,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: KinsaepTheme.textSecondary,
+                  ),
+                ),
               ],
             ),
           );
@@ -325,7 +459,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             final item = itemList[index];
             return _ItemCard(
               name: item['name'] as String,
-              price: CurrencyUtil.format((item['price'] as num).toDouble(), currency),
+              price: CurrencyUtil.format(
+                (item['price'] as num).toDouble(),
+                currency,
+              ),
               imagePath: item['imagePath'] as String?,
               onTap: () {
                 HapticFeedback.lightImpact();
@@ -335,17 +472,20 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
-                    builder: (_) => ModifierSelectorSheet(
-                      item: item,
-                      modifiersJson: modifiers,
-                    ),
+                    builder:
+                        (_) => ModifierSelectorSheet(
+                          item: item,
+                          modifiersJson: modifiers,
+                        ),
                   );
                 } else {
-                  ref.read(cartProvider.notifier).addItem(
-                    item['id'] as String,
-                    item['name'] as String,
-                    (item['price'] as num).toDouble(),
-                  );
+                  ref
+                      .read(cartProvider.notifier)
+                      .addItem(
+                        item['id'] as String,
+                        item['name'] as String,
+                        (item['price'] as num).toDouble(),
+                      );
                 }
               },
             );
@@ -362,7 +502,13 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     return results.when(
       data: (itemList) {
         if (itemList.isEmpty) {
-          return const Center(child: Icon(Icons.search_off_rounded, size: 64, color: KinsaepTheme.border));
+          return const Center(
+            child: Icon(
+              Icons.search_off_rounded,
+              size: 64,
+              color: KinsaepTheme.border,
+            ),
+          );
         }
         return ListView.builder(
           padding: const EdgeInsets.all(16),
@@ -370,9 +516,20 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           itemBuilder: (context, index) {
             final item = itemList[index];
             return ListTile(
-              title: Text(item['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text(CurrencyUtil.format((item['price'] as num).toDouble(), currency)),
-              trailing: const Icon(Icons.add_circle_rounded, color: KinsaepTheme.primary),
+              title: Text(
+                item['name'] as String,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                CurrencyUtil.format(
+                  (item['price'] as num).toDouble(),
+                  currency,
+                ),
+              ),
+              trailing: const Icon(
+                Icons.add_circle_rounded,
+                color: KinsaepTheme.primary,
+              ),
               onTap: () {
                 final modifiers = item['modifiers'] as String? ?? '[]';
                 if (modifiers != '[]') {
@@ -380,17 +537,20 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
-                    builder: (_) => ModifierSelectorSheet(
-                      item: item,
-                      modifiersJson: modifiers,
-                    ),
+                    builder:
+                        (_) => ModifierSelectorSheet(
+                          item: item,
+                          modifiersJson: modifiers,
+                        ),
                   );
                 } else {
-                  ref.read(cartProvider.notifier).addItem(
-                    item['id'] as String,
-                    item['name'] as String,
-                    (item['price'] as num).toDouble(),
-                  );
+                  ref
+                      .read(cartProvider.notifier)
+                      .addItem(
+                        item['id'] as String,
+                        item['name'] as String,
+                        (item['price'] as num).toDouble(),
+                      );
                 }
               },
             );
@@ -497,7 +657,9 @@ class _ItemCard extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   color: KinsaepTheme.surface,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(14),
+                  ),
                 ),
                 child: Center(
                   child: Icon(
