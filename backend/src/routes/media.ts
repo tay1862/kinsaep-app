@@ -58,6 +58,25 @@ mediaRouter.post('/', async (req: AuthRequest, res: Response): Promise<void> => 
       return;
     }
 
+    const resolvedItemId =
+      itemId && req.storeId
+        ? (
+            await prisma.item.findFirst({
+              where: { id: itemId, storeId: req.storeId },
+              select: { id: true },
+            })
+          )?.id ?? null
+        : null;
+    const resolvedDeviceId =
+      deviceId && req.storeId
+        ? (
+            await prisma.device.findFirst({
+              where: { id: deviceId, storeId: req.storeId },
+              select: { id: true },
+            })
+          )?.id ?? null
+        : null;
+
     const thumbnailPath = await saveThumbnailData(
       req.storeId,
       `${Date.now()}-${fileName}`,
@@ -67,8 +86,8 @@ mediaRouter.post('/', async (req: AuthRequest, res: Response): Promise<void> => 
     const media = await prisma.mediaAsset.create({
       data: {
         storeId: req.storeId,
-        itemId: itemId || null,
-        deviceId: deviceId || null,
+        itemId: resolvedItemId,
+        deviceId: resolvedDeviceId,
         fileName,
         mimeType,
         thumbnailPath,

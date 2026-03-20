@@ -895,11 +895,19 @@ async function upsertKitchenTickets(
           })
         )?.id ?? null
       : null;
+    const resolvedSourceDeviceId = ticket.sourceDeviceId
+      ? (
+          await tx.device.findFirst({
+            where: { id: String(ticket.sourceDeviceId), storeId },
+            select: { id: true },
+          })
+        )?.id ?? deviceId ?? null
+      : deviceId ?? null;
     await tx.kitchenTicket.upsert({
       where: { id: ticketId },
       update: {
         saleId: resolvedSaleId,
-        sourceDeviceId: nullableString(ticket.sourceDeviceId) ?? deviceId ?? null,
+        sourceDeviceId: resolvedSourceDeviceId,
         status: (ticket.status as never) ?? 'NEW',
         note: nullableString(ticket.note),
       },
@@ -907,7 +915,7 @@ async function upsertKitchenTickets(
         id: ticketId,
         storeId,
         saleId: resolvedSaleId,
-        sourceDeviceId: nullableString(ticket.sourceDeviceId) ?? deviceId ?? null,
+        sourceDeviceId: resolvedSourceDeviceId,
         status: (ticket.status as never) ?? 'NEW',
         note: nullableString(ticket.note),
       },
