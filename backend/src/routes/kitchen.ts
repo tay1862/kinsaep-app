@@ -213,10 +213,20 @@ kitchenRouter.post('/tickets', async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
+    const resolvedSaleId =
+      saleId && req.storeId
+        ? (
+            await prisma.sale.findFirst({
+              where: { id: saleId, storeId: req.storeId },
+              select: { id: true },
+            })
+          )?.id ?? null
+        : null;
+
     const ticket = await prisma.kitchenTicket.create({
       data: {
         storeId: req.storeId,
-        saleId,
+        saleId: resolvedSaleId,
         sourceDeviceId,
         note: note || null,
         items: {

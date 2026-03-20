@@ -1,12 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:kinsaep_pos/app/theme.dart';
-import 'package:kinsaep_pos/core/network/api_client.dart';
-import 'package:kinsaep_pos/core/network/cloud_state.dart';
 import 'package:kinsaep_pos/core/providers/app_providers.dart';
 import 'package:kinsaep_pos/core/utils/currency_util.dart';
 import 'package:kinsaep_pos/core/database/database_helper.dart';
@@ -35,11 +31,34 @@ class _PaymentSheetState extends ConsumerState<PaymentSheet> {
   final _splitOtherController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _setExactCashAmount(ref.read(totalAfterDiscountProvider));
+    });
+  }
+
+  @override
   void dispose() {
     _amountController.dispose();
     _splitCashController.dispose();
     _splitOtherController.dispose();
     super.dispose();
+  }
+
+  void _setExactCashAmount(double amount) {
+    final normalizedText =
+        amount == amount.roundToDouble()
+            ? amount.toStringAsFixed(0)
+            : amount.toStringAsFixed(2);
+    _amountPaid = amount;
+    _amountController.text = normalizedText;
+    _amountController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _amountController.text.length),
+    );
   }
 
   @override
@@ -116,7 +135,11 @@ class _PaymentSheetState extends ConsumerState<PaymentSheet> {
                           icon: Icons.payments_rounded,
                           label: l10n.cash,
                           isSelected: _paymentMethod == 'cash',
-                          onTap: () => setState(() => _paymentMethod = 'cash'),
+                          onTap:
+                              () => setState(() {
+                                _paymentMethod = 'cash';
+                                _setExactCashAmount(total);
+                              }),
                         ),
                         const SizedBox(width: 10),
                         _PayMethodChip(
@@ -678,70 +701,6 @@ class _PaymentSheetState extends ConsumerState<PaymentSheet> {
       'syncStatus': 'PENDING',
     };
 
-    final canWriteCloud =
-        await ApiClient.hasSession() &&
-        ((settings['serverUrl'] as String?)?.isNotEmpty ?? false) &&
-        (settings['syncEnabled'] == 1) &&
-        ((settings['subscriptionStatus'] as String?) ==
-            CloudSubscriptionStatus.active);
-
-    if (canWriteCloud) {
-      final response = await ApiClient.post('/kitchen/tickets', {
-        'saleId': saleId,
-        'sourceDeviceId': settings['deviceId'],
-        'items':
-            kitchenItems
-                .map(
-                  (item) => {
-                    'itemId': item['itemId'],
-                    'stationId': item['stationId'],
-                    'itemName': item['itemName'],
-                    'quantity': item['quantity'],
-                    'note': item['note'],
-                  },
-                )
-                .toList(),
-      });
-
-      if (response.statusCode == 201) {
-        final body = _decodeBody(response.body);
-        final remoteItems =
-            (body['items'] as List<dynamic>? ?? [])
-                .cast<Map<String, dynamic>>();
-        await DatabaseHelper.instance.saveKitchenTicket({
-          'id': body['id'],
-          'saleId': body['saleId'],
-          'sourceDeviceId': body['sourceDeviceId'],
-          'status': body['status'],
-          'note': body['note'],
-          'createdAt': body['createdAt'] ?? now,
-          'updatedAt': body['updatedAt'] ?? now,
-          'syncStatus': 'SYNCED',
-        });
-        await DatabaseHelper.instance.replaceKitchenTicketItems(
-          body['id'] as String,
-          remoteItems
-              .map(
-                (item) => {
-                  'id': item['id'],
-                  'ticketId': body['id'],
-                  'itemId': item['itemId'],
-                  'stationId': item['stationId'],
-                  'itemName': item['itemName'],
-                  'quantity': item['quantity'],
-                  'status': item['status'],
-                  'note': item['note'],
-                  'createdAt': item['createdAt'] ?? now,
-                  'updatedAt': item['updatedAt'] ?? now,
-                },
-              )
-              .toList(),
-        );
-        ref.invalidate(kitchenTicketsProvider);
-        return;
-      }
-    }
-
     await DatabaseHelper.instance.saveKitchenTicket(baseTicket);
     await DatabaseHelper.instance.replaceKitchenTicketItems(
       localTicketId,
@@ -798,14 +757,6 @@ class _PaymentSheetState extends ConsumerState<PaymentSheet> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('$error')));
-    }
-  }
-
-  Map<String, dynamic> _decodeBody(String body) {
-    try {
-      return jsonDecode(body) as Map<String, dynamic>;
-    } catch (_) {
-      return <String, dynamic>{};
     }
   }
 }

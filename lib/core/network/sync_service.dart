@@ -324,13 +324,6 @@ class SyncService {
       pendingSaleItems = await _querySaleItems(db, saleIds);
     }
 
-    if (pendingMediaAssets.isNotEmpty) {
-      await _uploadPendingMedia(
-        pendingMediaAssets: pendingMediaAssets,
-        deviceId: currentDevice['id'] as String,
-      );
-    }
-
     final nothingToSync =
         pendingCategories.isEmpty &&
         pendingItems.isEmpty &&
@@ -401,7 +394,17 @@ class SyncService {
       if (scopes.contains('rawSales')) 'sales': pendingSales,
       if (scopes.contains('rawSales')) 'saleItems': pendingSaleItems,
       if (scopes.contains('rawSales')) 'shifts': pendingShifts,
-      if (scopes.contains('kitchen')) 'kitchenTickets': pendingKitchenTickets,
+      if (scopes.contains('kitchen'))
+        'kitchenTickets':
+            pendingKitchenTickets
+                .map(
+                  (ticket) => {
+                    ...ticket,
+                    'saleId':
+                        scopes.contains('rawSales') ? ticket['saleId'] : null,
+                  },
+                )
+                .toList(),
       if (scopes.contains('tombstones')) 'tombstones': pendingTombstones,
     };
 
@@ -464,10 +467,23 @@ class SyncService {
         }
         await DatabaseHelper.instance.updateSyncState(
           status: SyncJobState.running,
-          progress: 60,
+          progress: pendingMediaAssets.isNotEmpty ? 70 : 60,
           error: null,
           lastSyncAt: body['serverTime'] as String?,
         );
+
+        if (pendingMediaAssets.isNotEmpty) {
+          await _uploadPendingMedia(
+            pendingMediaAssets: pendingMediaAssets,
+            deviceId: currentDevice['id'] as String,
+          );
+          await DatabaseHelper.instance.updateSyncState(
+            status: SyncJobState.running,
+            progress: 85,
+            error: null,
+            lastSyncAt: body['serverTime'] as String?,
+          );
+        }
         return;
       }
 

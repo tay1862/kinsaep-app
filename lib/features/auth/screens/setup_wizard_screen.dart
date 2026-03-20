@@ -86,7 +86,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       backgroundColor: KinsaepTheme.surface,
       appBar: AppBar(
         title: const Text(
-          'Store Setup Wizard',
+          'First-Time Device Setup',
           style: TextStyle(
             color: KinsaepTheme.textPrimary,
             fontWeight: FontWeight.bold,
@@ -103,7 +103,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Let\'s configure your store for offline use.',
+                'Set up this device once before selling. You can connect to your cloud store later from More > Cloud & Sync.',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 32),

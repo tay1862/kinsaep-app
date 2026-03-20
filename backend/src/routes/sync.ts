@@ -887,10 +887,18 @@ async function upsertKitchenTickets(
 ): Promise<number> {
   for (const ticket of kitchenTickets) {
     const ticketId = String(ticket.id);
+    const resolvedSaleId = ticket.saleId
+      ? (
+          await tx.sale.findFirst({
+            where: { id: String(ticket.saleId), storeId },
+            select: { id: true },
+          })
+        )?.id ?? null
+      : null;
     await tx.kitchenTicket.upsert({
       where: { id: ticketId },
       update: {
-        saleId: nullableString(ticket.saleId),
+        saleId: resolvedSaleId,
         sourceDeviceId: nullableString(ticket.sourceDeviceId) ?? deviceId ?? null,
         status: (ticket.status as never) ?? 'NEW',
         note: nullableString(ticket.note),
@@ -898,7 +906,7 @@ async function upsertKitchenTickets(
       create: {
         id: ticketId,
         storeId,
-        saleId: nullableString(ticket.saleId),
+        saleId: resolvedSaleId,
         sourceDeviceId: nullableString(ticket.sourceDeviceId) ?? deviceId ?? null,
         status: (ticket.status as never) ?? 'NEW',
         note: nullableString(ticket.note),
